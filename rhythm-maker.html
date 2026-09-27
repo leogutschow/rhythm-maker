@@ -44,6 +44,8 @@ input[type=file]{display:none;}
 .hud{display:flex; justify-content:space-between; align-items:center; padding:10px 16px; padding-top:calc(10px + env(safe-area-inset-top,0px)); background:var(--panel); border-bottom:1px solid var(--line);}
 .hud .n{font-family:ui-monospace,Menlo,monospace; font-weight:700; font-size:1.05rem;}
 .hud .lbl{color:var(--sub); font-size:.7rem;}
+#exitBtn{background:var(--panel2); color:var(--sub); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:.8rem; font-weight:600; cursor:pointer;}
+#exitBtn:active{color:var(--text); border-color:var(--accent);}
 #canvasWrap{position:relative; flex:1; min-height:0;}
 canvas{width:100%; height:100%; display:block;}
 #feedback{position:absolute; top:14%; left:0; right:0; text-align:center; font-weight:800; font-size:1.3rem; pointer-events:none; opacity:0; transition:opacity .1s;}
@@ -106,7 +108,9 @@ canvas{width:100%; height:100%; display:block;}
   <div id="previewCanvasWrap"><canvas id="previewCv"></canvas></div>
   <div style="width:100%;max-width:420px;">
     <button class="big" id="playFromPreview">Jogar</button>
+    <button class="ghost" id="downloadBtn1">Baixar chart (JSON)</button>
     <button class="ghost" id="adjustBtn">Ajustar botões / dificuldade</button>
+    <p class="sub" id="downloadStatus1" style="margin:8px 0 0;min-height:1em;"></p>
   </div>
 </div>
 
@@ -114,6 +118,7 @@ canvas{width:100%; height:100%; display:block;}
   <div class="hud">
     <div><div class="lbl">PONTOS</div><div class="n" id="scoreN">0</div></div>
     <div><div class="lbl">COMBO</div><div class="n" id="comboN">0</div></div>
+    <button id="exitBtn" title="Sair e ir para o download">✕ Sair</button>
   </div>
   <div id="canvasWrap"><canvas id="cv"></canvas><div id="feedback"></div></div>
   <div id="pads"></div>
@@ -126,8 +131,10 @@ canvas{width:100%; height:100%; display:block;}
   <div class="statrow"><span>Precisão</span><b id="rAcc">0%</b></div>
   <div style="width:100%;max-width:420px;">
     <button class="big" id="replayBtn">Jogar de novo</button>
+    <button class="ghost" id="downloadBtn2">Baixar chart (JSON)</button>
     <button class="ghost" id="tweakBtn">Trocar dificuldade / botões</button>
     <button class="ghost" id="newSongBtn">Escolher outra música</button>
+    <p class="sub" id="downloadStatus2" style="margin:8px 0 0;min-height:1em;"></p>
   </div>
 </div>
 
@@ -141,6 +148,7 @@ let lanes=5, diffKey='medium', audioBuf=null, rawOnsets=null, chart=null;
 let audioCtx=null, source=null, t0=0, playing=false;
 let score=0, combo=0, maxCombo=0, hits=0, misses=0;
 let holding={};
+let songFileName='';
 
 document.getElementById('laneOpts').onclick=e=>{
   const o=e.target.closest('.opt'); if(!o)return;
@@ -154,10 +162,38 @@ document.getElementById('diffOpts').onclick=e=>{
 };
 document.getElementById('fileInput').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
+  songFileName=f.name;
   const btn=document.getElementById('fileBtn');
   btn.textContent=f.name; btn.classList.add('chosen');
   document.getElementById('startBtn').disabled=false;
 };
+
+// ---- chart export ----
+async function downloadChart(statusElId){
+  const statusEl=document.getElementById(statusElId);
+  const setStatus=(t,isErr)=>{ if(statusEl){ statusEl.textContent=t; statusEl.style.color=isErr?'var(--bad)':'var(--good)'; } };
+  if(!chart){ setStatus('Nenhum chart gerado ainda.', true); return; }
+  const base=(songFileName||'musica').replace(/\.[^.]+$/,'').replace(/[^a-z0-9_\-]+/gi,'_')||'musica';
+  const filename=`${base}-chart.json`;
+  const payload={
+    schemaVersion:1,
+    song:{ fileName:songFileName||null, durationSec:audioBuf?+audioBuf.duration.toFixed(3):null },
+    settings:{ lanes:lanes, difficulty:diffKey },
+    notes: chart.map(n=>({ time:+n.time.toFixed(4), lane:n.lane, duration:+(n.dur||0).toFixed(4), chord:!!n.chord }))
+  };
+  const json=JSON.stringify(payload,null,2);
+  try{
+    const cap=(typeof claude!=='undefined' && claude.use) ? await claude.use('downloads') : null;
+    if(!cap){ setStatus('Download indisponível neste ambiente.', true); return; }
+    const res=await cap.save({filename, data:json});
+    setStatus(res && res.status==='delivered' ? 'Chart entregue.' : 'Chart salvo!', false);
+  }catch(err){
+    if(err && err.code==='declined'){ setStatus(''); return; }
+    setStatus('Não foi possível salvar agora.', true);
+  }
+}
+document.getElementById('downloadBtn1').onclick=()=>downloadChart('downloadStatus1');
+document.getElementById('downloadBtn2').onclick=()=>downloadChart('downloadStatus2');
 
 function show(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -556,6 +592,11 @@ document.getElementById('replayBtn').onclick=()=>{
   startGame();
 };
 document.getElementById('tweakBtn').onclick=()=>{ show('setupScreen'); };
+document.getElementById('exitBtn').onclick=()=>{
+  playing=false; holding={};
+  try{ source.stop(); }catch(e){}
+  showPreview();
+};
 document.getElementById('newSongBtn').onclick=()=>{
   audioBuf=null; rawOnsets=null; chart=null;
   document.getElementById('fileInput').value='';
