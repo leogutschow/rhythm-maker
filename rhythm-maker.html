@@ -184,9 +184,18 @@ async function downloadChart(statusElId){
   const json=JSON.stringify(payload,null,2);
   try{
     const cap=(typeof claude!=='undefined' && claude.use) ? await claude.use('downloads') : null;
-    if(!cap){ setStatus('Download indisponível neste ambiente.', true); return; }
-    const res=await cap.save({filename, data:json});
-    setStatus(res && res.status==='delivered' ? 'Chart entregue.' : 'Chart salvo!', false);
+    if(cap){
+      const res=await cap.save({filename, data:json});
+      setStatus(res && res.status==='delivered' ? 'Chart entregue.' : 'Chart salvo!', false);
+    }else{
+      const blob=new Blob([json], {type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download=filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      setStatus('Chart salvo!', false);
+    }
   }catch(err){
     if(err && err.code==='declined'){ setStatus(''); return; }
     setStatus('Não foi possível salvar agora.', true);
