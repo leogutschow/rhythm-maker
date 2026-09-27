@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monta Ritmo</title>
+<style>
+:root{
+  --bg:#0b0d14; --panel:#161a26; --panel2:#1e2333; --text:#eef0f6; --sub:#8b93ad;
+  --accent:#ffb340; --accent2:#ff7a59; --line:#2a3047; --good:#4ade80; --bad:#f87171;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b0d14;--panel:#161a26;--panel2:#1e2333;--text:#eef0f6;--sub:#8b93ad;--line:#2a3047;}}
+:root[data-theme="dark"]{--bg:#0b0d14;--panel:#161a26;--panel2:#1e2333;--text:#eef0f6;--sub:#8b93ad;--line:#2a3047;}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,"Segoe UI",ui-rounded,system-ui,sans-serif;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  overflow-x:hidden;
+}
+.screen{display:none; min-height:100%; flex-direction:column; align-items:center; padding:24px 18px 18px;}
+.screen.active{display:flex;}
+h1{font-size:1.5rem; font-weight:800; letter-spacing:-.01em; margin:6px 0 2px;}
+.sub{color:var(--sub); font-size:.92rem; margin:0 0 22px; text-align:center; max-width:340px;}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px; width:100%; max-width:420px;}
+.field{margin-bottom:18px;}
+.field label{display:block; font-size:.85rem; color:var(--sub); margin-bottom:8px;}
+.filebtn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; border-radius:10px; border:1.5px dashed var(--line); background:var(--panel2); color:var(--text); font-size:.95rem; cursor:pointer;}
+.filebtn.chosen{border-style:solid; border-color:var(--accent); color:var(--accent);}
+input[type=file]{display:none;}
+.optrow{display:flex; gap:8px; flex-wrap:wrap;}
+.opt{flex:1; min-width:60px; padding:10px 6px; border-radius:10px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-size:.95rem; cursor:pointer; text-align:center;}
+.opt.sel{border-color:var(--accent); background:rgba(255,179,64,.14); color:var(--accent); font-weight:700;}
+.big{width:100%; padding:15px; border-radius:12px; border:none; background:var(--accent); color:#1a1206; font-weight:800; font-size:1rem; cursor:pointer; margin-top:6px;}
+.big:disabled{opacity:.4; cursor:not-allowed;}
+.ghost{width:100%; padding:13px; border-radius:12px; border:1.5px solid var(--line); background:transparent; color:var(--text); font-weight:600; font-size:.92rem; cursor:pointer; margin-top:10px;}
+#analyzing{display:none; text-align:center;}
+#analyzing.active{display:block;}
+.spin{width:38px; height:38px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; margin:0 auto 14px; animation:sp 0.8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+#gameScreen{padding:0; align-items:stretch;}
+.hud{display:flex; justify-content:space-between; align-items:center; padding:10px 16px; padding-top:calc(10px + env(safe-area-inset-top,0px)); background:var(--panel); border-bottom:1px solid var(--line);}
+.hud .n{font-family:ui-monospace,Menlo,monospace; font-weight:700; font-size:1.05rem;}
+.hud .lbl{color:var(--sub); font-size:.7rem;}
+#canvasWrap{position:relative; flex:1; min-height:0;}
+canvas{width:100%; height:100%; display:block;}
+#feedback{position:absolute; top:14%; left:0; right:0; text-align:center; font-weight:800; font-size:1.3rem; pointer-events:none; opacity:0; transition:opacity .1s;}
+#pads{display:flex; gap:6px; padding:10px; padding-bottom:calc(10px + env(safe-area-inset-bottom,0px)); background:var(--panel);}
+.pad{flex:1; height:64px; border-radius:12px; border:none; font-weight:800; font-size:1.1rem; color:#0a0a0a; touch-action:manipulation; user-select:none; transition:transform .06s, filter .06s;}
+.pad:active, .pad.press{transform:scale(.93); filter:brightness(1.3);}
+#results{gap:10px;}
+.statrow{display:flex; justify-content:space-between; width:100%; max-width:420px; padding:10px 0; border-bottom:1px solid var(--line); font-size:.95rem;}
+.statrow b{font-family:ui-monospace,Menlo,monospace; font-size:1.1rem;}
+#previewCanvasWrap{width:100%; border-radius:10px; overflow:hidden; background:var(--panel2); margin:4px 0 16px;}
+#previewCv{width:100%; display:block;}
+.legend{display:flex; gap:14px; font-size:.78rem; color:var(--sub); margin-bottom:10px; flex-wrap:wrap; justify-content:center;}
+.legend span{display:inline-flex; align-items:center; gap:5px;}
+.dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
+</style>
+</head>
+<body>
+
+<div id="setupScreen" class="screen active">
+  <h1>🎸 Monta Ritmo</h1>
+  <p class="sub">Escolha uma música e ela vira um jogo de notas — estilo Guitar Hero — direto no navegador.</p>
+  <div class="card">
+    <div class="field">
+      <label>Música</label>
+      <label class="filebtn" id="fileBtn" for="fileInput">Escolher arquivo de áudio</label>
+      <input type="file" id="fileInput" accept="audio/*">
+    </div>
+    <div class="field">
+      <label>Quantidade de botões</label>
+      <div class="optrow" id="laneOpts">
+        <div class="opt" data-v="3">3</div>
+        <div class="opt" data-v="4">4</div>
+        <div class="opt sel" data-v="5">5</div>
+        <div class="opt" data-v="6">6</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Dificuldade</label>
+      <div class="optrow" id="diffOpts">
+        <div class="opt" data-v="easy">Fácil</div>
+        <div class="opt sel" data-v="medium">Médio</div>
+        <div class="opt" data-v="hard">Difícil</div>
+      </div>
+    </div>
+    <button class="big" id="startBtn" disabled>Analisar</button>
+  </div>
+  <div id="analyzing">
+    <div class="spin"></div>
+    <p class="sub" id="analyzingTxt">Analisando notas e batidas...</p>
+  </div>
+</div>
+
+<div id="previewScreen" class="screen">
+  <h1>Prévia do chart</h1>
+  <p class="sub" id="previewStats">—</p>
+  <div class="legend">
+    <span><span class="dot" style="background:#ffb340"></span>acorde</span>
+    <span><span class="dot" style="background:#8b93ad;border-radius:2px;width:14px;height:5px"></span>nota segurada</span>
+  </div>
+  <div id="previewCanvasWrap"><canvas id="previewCv"></canvas></div>
+  <div style="width:100%;max-width:420px;">
+    <button class="big" id="playFromPreview">Jogar</button>
+    <button class="ghost" id="adjustBtn">Ajustar botões / dificuldade</button>
+  </div>
+</div>
+
+<div id="gameScreen" class="screen">
+  <div class="hud">
+    <div><div class="lbl">PONTOS</div><div class="n" id="scoreN">0</div></div>
+    <div><div class="lbl">COMBO</div><div class="n" id="comboN">0</div></div>
+  </div>
+  <div id="canvasWrap"><canvas id="cv"></canvas><div id="feedback"></div></div>
+  <div id="pads"></div>
+</div>
+
+<div id="results" class="screen">
+  <h1>Fim de jogo</h1>
+  <div class="statrow"><span>Pontuação</span><b id="rScore">0</b></div>
+  <div class="statrow"><span>Maior combo</span><b id="rCombo">0</b></div>
+  <div class="statrow"><span>Precisão</span><b id="rAcc">0%</b></div>
+  <div style="width:100%;max-width:420px;">
+    <button class="big" id="replayBtn">Jogar de novo</button>
+    <button class="ghost" id="tweakBtn">Trocar dificuldade / botões</button>
+    <button class="ghost" id="newSongBtn">Escolher outra música</button>
+  </div>
+</div>
+
+<script>
+const DIFF = {
+  easy:{keep:0.22, spacing:0.42, travel:1.7, chordChance:0, holds:false},
+  medium:{keep:0.48, spacing:0.26, travel:1.2, chordChance:0.10, holds:true},
+  hard:{keep:0.85, spacing:0.13, travel:0.8, chordChance:0.22, holds:true}
+};
+let lanes=5, diffKey='medium', audioBuf=null, rawOnsets=null, chart=null;
+let audioCtx=null, source=null, t0=0, playing=false;
+let score=0, combo=0, maxCombo=0, hits=0, misses=0;
+let holding={};
+
+document.getElementById('laneOpts').onclick=e=>{
+  const o=e.target.closest('.opt'); if(!o)return;
+  document.querySelectorAll('#laneOpts .opt').forEach(x=>x.classList.remove('sel'));
+  o.classList.add('sel'); lanes=+o.dataset.v;
+};
+document.getElementById('diffOpts').onclick=e=>{
+  const o=e.target.closest('.opt'); if(!o)return;
+  document.querySelectorAll('#diffOpts .opt').forEach(x=>x.classList.remove('sel'));
+  o.classList.add('sel'); diffKey=o.dataset.v;
+};
+document.getElementById('fileInput').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const btn=document.getElementById('fileBtn');
+  btn.textContent=f.name; btn.classList.add('chosen');
+  document.getElementById('startBtn').disabled=false;
+};
+
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ---- FFT ----
+function fft(re,im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){
+    let bit=n>>1;
+    for(;j&bit;bit>>=1) j^=bit;
+    j^=bit;
+    if(i<j){let t=re[i];re[i]=re[j];re[j]=t; t=im[i];im[i]=im[j];im[j]=t;}
+  }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cwr=1,cwi=0;
+      for(let j=0;j<len/2;j++){
+        const ur=re[i+j], ui=im[i+j];
+        const vr=re[i+j+len/2]*cwr - im[i+j+len/2]*cwi;
+        const vi=re[i+j+len/2]*cwi + im[i+j+len/2]*cwr;
+        re[i+j]=ur+vr; im[i+j]=ui+vi;
+        re[i+j+len/2]=ur-vr; im[i+j+len/2]=ui-vi;
+        const nwr=cwr*wr-cwi*wi, nwi=cwr*wi+cwi*wr;
+        cwr=nwr; cwi=nwi;
+      }
+    }
+  }
+}
+
+function decimate(ch, factor){
+  const outLen=Math.floor(ch.length/factor);
+  const out=new Float32Array(outLen);
+  for(let i=0;i<outLen;i++){
+    let s=0; const base=i*factor;
+    for(let k=0;k<factor;k++) s+=ch[base+k];
+    out[i]=s/factor;
+  }
+  return out;
+}
+
+function analyzeAudio(buffer){
+  const ch=buffer.getChannelData(0);
+  const factor=Math.max(1,Math.round(buffer.sampleRate/11025));
+  const samples=decimate(ch,factor);
+  const sr=buffer.sampleRate/factor;
+  const N=1024, hop=512;
+  const win=new Float32Array(N);
+  for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/(N-1));
+  const nFrames=Math.max(0,Math.floor((samples.length-N)/hop));
+  const flux=new Float32Array(nFrames);
+  const centroid=new Float32Array(nFrames);
+  const energy=new Float32Array(nFrames);
+  const prevMag=new Float32Array(N/2);
+  const re=new Float32Array(N), im=new Float32Array(N);
+  for(let f=0;f<nFrames;f++){
+    const off=f*hop;
+    for(let i=0;i<N;i++){ re[i]=samples[off+i]*win[i]; im[i]=0; }
+    fft(re,im);
+    let fs=0,wsum=0,msum=0;
+    for(let k=0;k<N/2;k++){
+      const mag=Math.hypot(re[k],im[k]);
+      const d=mag-prevMag[k];
+      if(d>0) fs+=d;
+      wsum+=mag*k; msum+=mag;
+      prevMag[k]=mag;
+    }
+    flux[f]=fs;
+    centroid[f]= msum>0 ? wsum/msum : 0;
+    energy[f]=msum;
+  }
+  // peak pick
+  const win2=21, onsets=[];
+  for(let i=2;i<nFrames-2;i++){
+    if(flux[i]<flux[i-1]||flux[i]<flux[i+1]) continue;
+    const s=Math.max(0,i-win2), e=Math.min(nFrames,i+win2);
+    let sum=0,sum2=0; const cnt=e-s;
+    for(let k=s;k<e;k++){ sum+=flux[k]; sum2+=flux[k]*flux[k]; }
+    const mean=sum/cnt, std=Math.sqrt(Math.max(sum2/cnt-mean*mean,0));
+    if(flux[i]>mean+1.3*std+1e-5) onsets.push({frame:i, strength:flux[i]});
+  }
+  const minGap=Math.max(1,Math.round(0.06*sr/hop));
+  const filtered=[]; let last=-1e9;
+  for(const o of onsets){
+    if(o.frame-last>=minGap){ filtered.push(o); last=o.frame; }
+    else if(filtered.length && o.strength>filtered[filtered.length-1].strength){
+      filtered[filtered.length-1]=o; last=o.frame;
+    }
+  }
+  // sustain length: how long energy stays above a fraction of the onset's peak
+  const maxLookFrames=Math.round(2.5*sr/hop);
+  for(const o of filtered){
+    const f=o.frame;
+    const thresh=energy[f]*0.4;
+    let endFrame=f;
+    for(let k=f+1;k<Math.min(nFrames,f+maxLookFrames);k++){
+      if(energy[k]<thresh) break;
+      endFrame=k;
+    }
+    const durSec=(endFrame-f)*hop/sr;
+    o.dur = durSec>0.22 ? Math.min(durSec,2.2) : 0;
+  }
+  return {onsets:filtered, centroid, hop, sr};
+}
+
+function buildChart(raw, laneCount, diffKey){
+  const {onsets, centroid, hop, sr}=raw;
+  const d=DIFF[diffKey];
+  const cs=onsets.map(o=>centroid[o.frame]).slice().sort((a,b)=>a-b);
+  const edges=[];
+  for(let i=1;i<laneCount;i++) edges.push(cs[Math.floor(i*cs.length/laneCount)]||0);
+  const withLane=onsets.map(o=>{
+    const c=centroid[o.frame]; let lane=0;
+    while(lane<edges.length && c>edges[lane]) lane++;
+    return {...o, lane};
+  });
+  const sorted=withLane.slice().sort((a,b)=>b.strength-a.strength);
+  const keepN=Math.max(1,Math.round(sorted.length*d.keep));
+  const kept=new Set(sorted.slice(0,keepN).map(o=>o.frame));
+  let notes=withLane.filter(o=>kept.has(o.frame))
+    .map(o=>({time:o.frame*hop/sr, lane:o.lane, dur:d.holds?(o.dur||0):0, strength:o.strength}))
+    .sort((a,b)=>a.time-b.time);
+  const lastByLane={};
+  notes=notes.filter(n=>{
+    const lt=lastByLane[n.lane]??-1e9;
+    if(n.time-lt<d.spacing) return false;
+    lastByLane[n.lane]=n.time; return true;
+  });
+  // chords: on strong beats, add a partner note in a nearby lane
+  if(d.chordChance>0 && laneCount>1){
+    const strengths=notes.map(n=>n.strength).slice().sort((a,b)=>b-a);
+    const chordThresh=strengths[Math.floor(strengths.length*0.25)] ?? Infinity;
+    const extra=[];
+    for(const n of notes){
+      if(n.strength>=chordThresh && Math.random()<d.chordChance){
+        const partnerLane=(n.lane + (Math.random()<0.5?1:laneCount-1)) % laneCount;
+        const conflict = notes.some(m=>m.lane===partnerLane && Math.abs(m.time-n.time)<0.12)
+                       || extra.some(m=>m.lane===partnerLane && Math.abs(m.time-n.time)<0.12);
+        if(!conflict){
+          extra.push({time:n.time, lane:partnerLane, dur:0, strength:n.strength, chord:true});
+          n.chord=true;
+        }
+      }
+    }
+    notes=notes.concat(extra).sort((a,b)=>a.time-b.time);
+  }
+  notes.forEach(n=>{n.judged=false; n.missed=false;});
+  return notes;
+}
+
+function laneColor(i,total){
+  return `hsl(${Math.round(i*360/total)},80%,58%)`;
+}
+
+document.getElementById('startBtn').onclick=async()=>{
+  const f=document.getElementById('fileInput').files[0];
+  if(!f) return;
+  document.getElementById('analyzing').classList.add('active');
+  document.getElementById('startBtn').disabled=true;
+  await new Promise(r=>setTimeout(r,30));
+  try{
+    const arrbuf=await f.arrayBuffer();
+    const tmpCtx=new (window.AudioContext||window.webkitAudioContext)();
+    audioBuf=await tmpCtx.decodeAudioData(arrbuf);
+    rawOnsets=analyzeAudio(audioBuf);
+    audioCtx=tmpCtx;
+    chart=buildChart(rawOnsets, lanes, diffKey);
+    document.getElementById('analyzing').classList.remove('active');
+    document.getElementById('startBtn').disabled=false;
+    showPreview();
+  }catch(err){
+    document.getElementById('analyzingTxt').textContent='Não consegui ler esse áudio: '+err.message;
+    document.getElementById('startBtn').disabled=false;
+  }
+};
+
+function showPreview(){
+  const total=chart.length;
+  const holds=chart.filter(n=>n.dur>0).length;
+  const chords=chart.filter(n=>n.chord).length;
+  document.getElementById('previewStats').textContent=
+    `${total} notas · ${holds} seguradas · ${chords} acordes · ${lanes} botões · ${diffKeyLabel(diffKey)}`;
+  drawPreview();
+  show('previewScreen');
+}
+function diffKeyLabel(k){ return k==='easy'?'Fácil':k==='hard'?'Difícil':'Médio'; }
+
+function drawPreview(){
+  const cv=document.getElementById('previewCv');
+  const wrapRect=cv.parentElement.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=wrapRect.width, h=Math.max(120, lanes*26+16);
+  cv.style.height=h+'px';
+  cv.width=w*dpr; cv.height=h*dpr;
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
+  c.clearRect(0,0,w,h);
+  const dur=Math.max(0.1, audioBuf.duration);
+  const rowH=(h-16)/lanes;
+  for(let i=0;i<lanes;i++){
+    c.fillStyle='rgba(255,255,255,.045)';
+    c.fillRect(0, 8+i*rowH, w, rowH-4);
+  }
+  for(const n of chart){
+    const x=8+(n.time/dur)*(w-16);
+    const y=8+n.lane*rowH+rowH/2;
+    if(n.dur>0){
+      const dw=Math.max(3,(n.dur/dur)*(w-16));
+      c.fillStyle='rgba(139,147,173,.55)';
+      c.fillRect(x, y-2.5, dw, 5);
+    }
+    c.fillStyle= n.chord ? '#ffb340' : laneColor(n.lane,lanes);
+    c.beginPath();
+    c.arc(x,y, n.chord?4.6:3.2, 0, 7);
+    c.fill();
+  }
+}
+document.getElementById('playFromPreview').onclick=()=>startGame();
+document.getElementById('adjustBtn').onclick=()=>show('setupScreen');
+window.addEventListener('resize',()=>{
+  if(document.getElementById('previewScreen').classList.contains('active')) drawPreview();
+  if(playing) setupCanvas();
+});
+
+let cv,ctx,rect,hitY,laneW;
+function setupCanvas(){
+  cv=document.getElementById('cv'); ctx=cv.getContext('2d');
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  rect=document.getElementById('canvasWrap').getBoundingClientRect();
+  cv.width=rect.width*dpr; cv.height=rect.height*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  hitY=rect.height-56; laneW=rect.width/lanes;
+}
+
+function buildPads(){
+  const pads=document.getElementById('pads');
+  pads.innerHTML='';
+  for(let i=0;i<lanes;i++){
+    const b=document.createElement('button');
+    b.className='pad'; b.textContent=(i+1);
+    b.style.background=laneColor(i,lanes);
+    b.addEventListener('pointerdown',e=>{e.preventDefault(); b.classList.add('press'); press(i);});
+    b.addEventListener('pointerup',()=>{ b.classList.remove('press'); release(i); });
+    b.addEventListener('pointercancel',()=>{ b.classList.remove('press'); release(i); });
+    b.addEventListener('pointerleave',e=>{ if(e.buttons===0){ b.classList.remove('press'); release(i); } });
+    pads.appendChild(b);
+  }
+}
+window.addEventListener('keydown',e=>{
+  const n=+e.key;
+  if(!playing || isNaN(n) || n<1 || n>lanes || e.repeat) return;
+  const el=document.querySelectorAll('.pad')[n-1];
+  if(el) el.classList.add('press');
+  press(n-1);
+});
+window.addEventListener('keyup',e=>{
+  const n=+e.key;
+  if(isNaN(n) || n<1 || n>lanes) return;
+  const el=document.querySelectorAll('.pad')[n-1];
+  if(el) el.classList.remove('press');
+  release(n-1);
+});
+
+function press(lane){
+  if(!playing) return;
+  const now=audioCtx.currentTime-t0;
+  let best=null,bd=Infinity;
+  for(const n of chart){
+    if(n.judged || n.lane!==lane) continue;
+    const diff=Math.abs(n.time-now);
+    if(diff<bd){bd=diff;best=n;}
+  }
+  if(best && bd<=0.18){
+    best.judged=true;
+    const perfect=bd<=0.07;
+    combo++; maxCombo=Math.max(maxCombo,combo); hits++;
+    if(best.dur>0){
+      score+=(perfect?60:30)+combo*2;
+      holding[lane]=best;
+      flash(perfect?'Perfeito!':'Bom','var(--good)');
+    }else{
+      score+=(perfect?100:50)+combo*2;
+      flash(perfect?'Perfeito!':'Bom', perfect?'var(--good)':'var(--accent)');
+    }
+  }else{
+    flash('',null);
+  }
+  updateHud();
+}
+function release(lane){
+  const note=holding[lane];
+  if(!note) return;
+  const now=audioCtx.currentTime-t0;
+  const endTime=note.time+note.dur;
+  if(now>=endTime-0.12){
+    score+=80+combo*2;
+    flash('Segurou!','var(--good)');
+  }else{
+    combo=0;
+    flash('Soltou cedo','var(--bad)');
+  }
+  holding[lane]=null;
+  updateHud();
+}
+function updateHud(){
+  document.getElementById('scoreN').textContent=score;
+  document.getElementById('comboN').textContent=combo;
+}
+function flash(txt,color){
+  if(!txt) return;
+  const fb=document.getElementById('feedback');
+  fb.textContent=txt; fb.style.color=color; fb.style.opacity=1;
+  clearTimeout(flash._t);
+  flash._t=setTimeout(()=>fb.style.opacity=0,260);
+}
+
+function startGame(){
+  show('gameScreen');
+  score=0; combo=0; maxCombo=0; hits=0; misses=0; holding={};
+  updateHud();
+  chart.forEach(n=>{n.judged=false; n.missed=false;});
+  buildPads();
+  setupCanvas();
+  const d=DIFF[diffKey];
+  source=audioCtx.createBufferSource();
+  source.buffer=audioBuf;
+  source.connect(audioCtx.destination);
+  t0=audioCtx.currentTime+0.6;
+  source.start(t0);
+  playing=true;
+  requestAnimationFrame(()=>loop(d));
+  source.onended=()=>{ if(playing) endGame(); };
+}
+
+function loop(d){
+  if(!playing) return;
+  const now=audioCtx.currentTime-t0;
+  ctx.clearRect(0,0,rect.width,rect.height);
+  for(let i=1;i<lanes;i++){
+    ctx.strokeStyle='rgba(255,255,255,.06)';
+    ctx.beginPath(); ctx.moveTo(i*laneW,0); ctx.lineTo(i*laneW,rect.height); ctx.stroke();
+  }
+  ctx.fillStyle='rgba(255,179,64,.16)';
+  ctx.fillRect(0,hitY-4,rect.width,8);
+
+  for(let lane=0; lane<lanes; lane++){
+    const n=holding[lane];
+    if(n && now>=n.time+n.dur-0.06) release(lane);
+  }
+
+  function py(time){
+    const p=1-(time-now)/d.travel;
+    return Math.max(-0.2, p)*hitY;
+  }
+
+  for(const n of chart){
+    if(!n.judged){
+      if(now-n.time>0.18){ n.judged=true; n.missed=true; combo=0; misses++; updateHud(); continue; }
+      drawNote(n);
+    }else if(n.dur>0 && holding[n.lane]===n){
+      drawNote(n);
+    }
+  }
+  function drawNote(n){
+    const x=n.lane*laneW+laneW/2;
+    let yHead=Math.min(py(n.time), hitY);
+    if(n.dur>0){
+      const yTail=Math.min(py(n.time+n.dur), hitY);
+      ctx.fillStyle=(n.chord?'#ffb340':laneColor(n.lane,lanes))+'99';
+      const barW=Math.min(laneW*0.3,26);
+      ctx.fillRect(x-barW/2, Math.min(yTail,yHead), barW, Math.max(2,Math.abs(yHead-yTail)));
+    }
+    ctx.fillStyle=n.chord?'#ffb340':laneColor(n.lane,lanes);
+    ctx.beginPath(); ctx.arc(x,yHead,Math.min(laneW*0.28,22),0,7); ctx.fill();
+    if(n.chord){ ctx.strokeStyle='#fff8'; ctx.lineWidth=2; ctx.stroke(); }
+  }
+
+  if(now>audioBuf.duration+0.8){ endGame(); return; }
+  requestAnimationFrame(()=>loop(d));
+}
+
+function endGame(){
+  playing=false;
+  try{source.stop();}catch(e){}
+  const total=hits+misses;
+  const acc=total?Math.round(hits/total*100):100;
+  document.getElementById('rScore').textContent=score;
+  document.getElementById('rCombo').textContent=maxCombo;
+  document.getElementById('rAcc').textContent=acc+'%';
+  show('results');
+}
+
+document.getElementById('replayBtn').onclick=()=>{
+  chart=buildChart(rawOnsets, lanes, diffKey);
+  startGame();
+};
+document.getElementById('tweakBtn').onclick=()=>{ show('setupScreen'); };
+document.getElementById('newSongBtn').onclick=()=>{
+  audioBuf=null; rawOnsets=null; chart=null;
+  document.getElementById('fileInput').value='';
+  const btn=document.getElementById('fileBtn');
+  btn.textContent='Escolher arquivo de áudio'; btn.classList.remove('chosen');
+  document.getElementById('startBtn').disabled=true;
+  show('setupScreen');
+};
+</script>
+</body>
+</html>
